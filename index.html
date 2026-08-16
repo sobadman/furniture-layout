@@ -294,6 +294,17 @@
     touch-action:none;
     box-shadow:0 2px 8px rgba(0,0,0,.4);
   }
+  .snap-guide{
+    position:absolute;
+    background:#ff3b8d;
+    opacity:.9;
+    pointer-events:none;
+    z-index:4;
+    display:none;
+    box-shadow:0 0 6px rgba(255,59,141,.7);
+  }
+  .snap-guide.vertical{ width:2px; top:0; }
+  .snap-guide.horizontal{ height:2px; left:0; }
   #menuToggle{
     display:none;
     min-width:44px;
@@ -409,6 +420,17 @@ const CM_PER_PX = (327/228.5 + 412/274.5) / 2; // ≈ 1.46605
 const PLAN_W_CM = IMG_NATURAL_W * CM_PER_PX;
 const PLAN_H_CM = IMG_NATURAL_H * CM_PER_PX;
 
+/* ---------- 벽 자동 스냅 ----------
+   floorplan.png의 검은 벽 선(짙은 픽셀)을 분석해서 뽑아낸 가로/세로 선분 목록.
+   [위치px, 시작px, 끝px] 형식이며, 가구를 드래그하다 벽 근처(SNAP_THRESHOLD_CM)에
+   놓으면 그 변이 벽에 자동으로 달라붙습니다. */
+const H_LINES_PX = [[74.0,535,609],[74.0,650,702],[74.0,389,535],[74.0,609,650],[74.0,703,767],[74.0,389,767],[125.0,448,630],[130.0,641,709],[130.0,710,767],[130.0,625,767],[165.0,749,785],[165.0,838,897],[175.0,389,448],[192.0,624,676],[204.0,17,174],[204.0,220,398],[205.0,533,754],[221.5,681,782],[239.0,534,630],[254.0,17,134],[254.0,625,685],[260.0,785,838],[260.0,838,897],[260.0,777,897],[291.0,237,321],[304.0,17,134],[328.0,785,838],[328.0,310,448],[328.0,625,897],[328.0,838,897],[386.0,84,136],[399.0,146,190],[403.0,17,145],[403.0,191,333],[407.0,145,191],[407.0,333,379],[602.0,432,669],[602.0,17,71],[602.0,163,248],[602.0,341,432],[602.0,623,721],[602.0,836,897],[602.0,17,897],[605.0,71,163],[605.0,249,341],[605.0,722,836]];
+const V_LINES_PX = [[21.0,202,604],[128.0,346,390],[132.0,202,345],[136.0,345,390],[205.0,401,604],[215.0,155,207],[239.0,289,330],[267.0,202,293],[319.0,289,330],[393.5,72,330],[391.5,401,604],[448.0,125,173],[448.0,178,226],[624.0,151,197],[627.5,72,151],[627.5,197,330],[663.0,339,385],[666.5,385,604],[683.0,203,257],[719.0,72,132],[751.5,128,224],[765.0,72,167],[779.5,163,275],[895.0,163,336],[895.0,447,604]];
+const H_LINES_CM = H_LINES_PX.map(([y,x0,x1]) => [y*CM_PER_PX, x0*CM_PER_PX, x1*CM_PER_PX]);
+const V_LINES_CM = V_LINES_PX.map(([x,y0,y1]) => [x*CM_PER_PX, y0*CM_PER_PX, y1*CM_PER_PX]);
+const SNAP_THRESHOLD_CM = 12;
+const SNAP_MARGIN_CM = 30; // 벽 선분 범위 밖이라도 이 정도까지는 스냅 후보로 인정
+
 /* ---------- 상태 ---------- */
 let furniture = []; // {id,name,w,h,x,y,rot,color}
 let idSeq = 1;
@@ -514,6 +536,63 @@ function clampFurniture(f){
   f.y = Math.max(PLAN.minY, Math.min(f.y, PLAN.maxY-dispH));
 }
 
+// 가구의 변(왼/오/위/아래)이 벽 선 근처(SNAP_THRESHOLD_CM)에 오면 그 벽에 달라붙게 좌표를 보정한다.
+function snapFurniture(f){
+  const dispW = f.rot%180===0 ? f.w : f.h;
+  const dispH = f.rot%180===0 ? f.h : f.w;
+  const left = f.x, right = f.x+dispW, top = f.y, bottom = f.y+dispH;
+  const result = { snappedX:false, lineX:null, snappedY:false, lineY:null };
+  let bestXDist = SNAP_THRESHOLD_CM;
+  let bestYDist = SNAP_THRESHOLD_CM;
+
+  V_LINES_CM.forEach(([lx, ly0, ly1]) => {
+    if(bottom < ly0 - SNAP_MARGIN_CM || top > ly1 + SNAP_MARGIN_CM) return;
+    const dLeft = Math.abs(left - lx);
+    const dRight = Math.abs(right - lx);
+    if(dLeft < bestXDist){ bestXDist = dLeft; result.snappedX = true; result.lineX = lx; f.x = lx; }
+    if(dRight < bestXDist){ bestXDist = dRight; result.snappedX = true; result.lineX = lx; f.x = lx - dispW; }
+  });
+  H_LINES_CM.forEach(([ly, lx0, lx1]) => {
+    if(right < lx0 - SNAP_MARGIN_CM || left > lx1 + SNAP_MARGIN_CM) return;
+    const dTop = Math.abs(top - ly);
+    const dBottom = Math.abs(bottom - ly);
+    if(dTop < bestYDist){ bestYDist = dTop; result.snappedY = true; result.lineY = ly; f.y = ly; }
+    if(dBottom < bestYDist){ bestYDist = dBottom; result.snappedY = true; result.lineY = ly; f.y = ly - dispH; }
+  });
+  return result;
+}
+
+function ensureSnapGuides(){
+  let gv = document.getElementById('snapGuideV');
+  let gh = document.getElementById('snapGuideH');
+  if(!gv){ gv=document.createElement('div'); gv.id='snapGuideV'; gv.className='snap-guide vertical'; canvas.appendChild(gv); }
+  if(!gh){ gh=document.createElement('div'); gh.id='snapGuideH'; gh.className='snap-guide horizontal'; canvas.appendChild(gh); }
+  return {gv, gh};
+}
+function updateSnapGuides(snap){
+  const {gv, gh} = ensureSnapGuides();
+  if(snap.snappedX){
+    gv.style.left = planXToPx(snap.lineX)+'px';
+    gv.style.height = cmToPx(PLAN_H)+'px';
+    gv.style.display = 'block';
+  } else {
+    gv.style.display = 'none';
+  }
+  if(snap.snappedY){
+    gh.style.top = planYToPx(snap.lineY)+'px';
+    gh.style.width = cmToPx(PLAN_W)+'px';
+    gh.style.display = 'block';
+  } else {
+    gh.style.display = 'none';
+  }
+}
+function hideSnapGuides(){
+  const gv = document.getElementById('snapGuideV');
+  const gh = document.getElementById('snapGuideH');
+  if(gv) gv.style.display = 'none';
+  if(gh) gh.style.display = 'none';
+}
+
 function startDrag(e, f){
   // 마우스/터치/펜(스타일러스)을 모두 Pointer Events 하나로 통일 처리.
   // 펜 입력은 브라우저에 따라 mouseup/touchend가 아예 안 오는 경우가 있어
@@ -540,8 +619,10 @@ function startDrag(e, f){
     const dy = (ev.clientY - startClientY)/scale;
     f.x = startX + dx;
     f.y = startY + dy;
+    const snap = snapFurniture(f);
     clampFurniture(f);
     positionFurnitureEl(f);
+    updateSnapGuides(snap);
   }
   function onEnd(ev){
     if(ev.pointerId !== pointerId || ended) return;
@@ -550,6 +631,7 @@ function startDrag(e, f){
     document.removeEventListener('pointerup', onEnd);
     document.removeEventListener('pointercancel', onEnd);
     try{ el.releasePointerCapture(pointerId); }catch(err){}
+    hideSnapGuides();
     save();
     renderList();
   }
