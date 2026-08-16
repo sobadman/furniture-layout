@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>가구 배치 시뮬레이터</title>
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#1b1d22" />
+<link rel="icon" href="icon-192.png" />
+<!-- iOS 홈 화면 설치(사파리 "홈 화면에 추가") 지원용 -->
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="가구배치" />
+<style>
+  :root{
+    --bg:#1b1d22;
+    --panel:#24262c;
+    --panel2:#2c2f36;
+    --line:#3a3d45;
+    --text:#e8e9ec;
+    --sub:#9aa0ab;
+    --accent:#5b8cff;
+    --room-fill:#2a2d34;
+    --room-fill2:#31353d;
+    --balcony:#22262c;
+    --grid:#33363e;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+  #sidebar{
+    width:320px;
+    min-width:320px;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+  }
+  #sidebar h1{
+    font-size:16px;
+    margin:0;
+    padding:16px 16px 8px;
+    color:var(--text);
+  }
+  #sidebar h2{
+    font-size:12px;
+    color:var(--sub);
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    margin:18px 16px 8px;
+  }
+  .panel-block{padding:0 16px;}
+  .field-row{
+    display:flex;
+    gap:8px;
+    margin-bottom:8px;
+  }
+  .field-row input[type=text]{flex:1;}
+  .field-row input[type=number]{width:0;flex:1;}
+  input[type=text], input[type=number]{
+    background:var(--panel2);
+    border:1px solid var(--line);
+    color:var(--text);
+    border-radius:6px;
+    padding:11px 12px;
+    font-size:16px; /* 16px+ prevents iOS Safari auto-zoom on focus */
+    outline:none;
+    min-height:44px;
+  }
+  input[type=text]:focus, input[type=number]:focus{border-color:var(--accent);}
+  input[type=color]{
+    width:44px;height:44px;border:1px solid var(--line);border-radius:6px;
+    background:var(--panel2);padding:2px;cursor:pointer;
+  }
+  .unit-label{
+    font-size:13px;color:var(--sub);align-self:center;
+  }
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:6px;
+    font-size:14px;
+    font-weight:600;
+    padding:11px 14px;
+    min-height:44px;
+    touch-action:manipulation;
+  }
+  #addBtn{
+    width:100%;
+    background:var(--accent);
+    color:#fff;
+    margin-top:4px;
+  }
+  #addBtn:hover{background:#4a7bef;}
+  .ghost-btn{
+    background:transparent;
+    border:1px solid var(--line);
+    color:var(--sub);
+  }
+  .ghost-btn:hover{color:var(--text);border-color:var(--sub);}
+  #furnitureList{
+    padding:0 16px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .item-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:var(--panel2);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:8px 8px;
+    cursor:pointer;
+  }
+  .item-row.selected{border-color:var(--accent);}
+  .item-swatch{
+    width:16px;height:16px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,.2);
+  }
+  .item-info{flex:1;min-width:0;}
+  .item-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .item-dim{font-size:11.5px;color:var(--sub);}
+  .item-rotate{
+    background:transparent;color:var(--sub);font-size:17px;padding:0;
+    min-width:40px;min-height:40px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .item-rotate:hover{color:var(--accent);}
+  .item-del{
+    background:transparent;color:var(--sub);font-size:18px;padding:0;
+    min-width:40px;min-height:40px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .item-del:hover{color:#ff6b6b;}
+  #emptyMsg{
+    padding:8px 16px 16px;
+    font-size:12px;
+    color:var(--sub);
+    line-height:1.6;
+  }
+  #footerBtns{
+    margin-top:auto;
+    padding:16px;
+    display:flex;
+    gap:8px;
+    border-top:1px solid var(--line);
+  }
+  #footerBtns button{flex:1;}
+  #main{
+    flex:1;
+    position:relative;
+    overflow:auto;
+    background:
+      linear-gradient(var(--bg) 0 0);
+  }
+  #toolbar{
+    position:sticky;
+    top:0;
+    left:0;
+    z-index:20;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:rgba(27,29,34,.92);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid var(--line);
+    padding:10px 16px;
+  }
+  #toolbar .hint{font-size:12px;color:var(--sub);}
+  #toolbar .spacer{flex:1;}
+  #zoomVal{font-size:12px;color:var(--sub);width:42px;text-align:center;}
+  #canvasWrap{
+    padding:40px;
+  }
+  #canvas{
+    position:relative;
+    background:var(--panel);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    outline:1px solid var(--line);
+  }
+  .room{
+    position:absolute;
+    background:var(--room-fill);
+    border:2px solid #565b66;
+  }
+  .room.alt{background:var(--room-fill2);}
+  .room.balcony{
+    background:repeating-linear-gradient(45deg, var(--balcony), var(--balcony) 6px, #2a2e35 6px, #2a2e35 8px);
+    border:1.5px dashed #565b66;
+  }
+  .room.opening{
+    border:none;
+    background:transparent;
+  }
+  .room-label{
+    position:absolute;
+    font-size:12px;
+    color:var(--sub);
+    top:6px;
+    left:8px;
+    pointer-events:none;
+    line-height:1.35;
+    white-space:nowrap;
+  }
+  .room-label b{color:var(--text);font-size:12.5px;}
+  .fixture{
+    position:absolute;
+    border:1px solid #4a4e58;
+    background:#3a3e47;
+    border-radius:3px;
+    pointer-events:none;
+  }
+  .fixture.door{
+    background:transparent;
+    border:none;
+  }
+  .furniture{
+    position:absolute;
+    border:2px solid rgba(0,0,0,.35);
+    border-radius:4px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    font-size:12px;
+    color:#111;
+    font-weight:600;
+    cursor:grab;
+    user-select:none;
+    box-shadow:0 2px 6px rgba(0,0,0,.35);
+    line-height:1.3;
+    padding:2px;
+    overflow:hidden;
+    touch-action:none;
+  }
+  .furniture.selected{
+    outline:2px solid #fff;
+    outline-offset:1px;
+    box-shadow:0 0 0 3px rgba(91,140,255,.55), 0 2px 6px rgba(0,0,0,.4);
+  }
+  .furniture:active{cursor:grabbing;}
+  .furniture .dim{
+    font-size:10px;
+    font-weight:400;
+    opacity:.75;
+  }
+  .rotate-handle{
+    position:absolute;
+    width:40px;height:40px;
+    background:#fff;
+    border-radius:50%;
+    border:2px solid var(--accent);
+    top:-52px;
+    left:50%;
+    transform:translateX(-50%);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:19px;
+    z-index:5;
+    touch-action:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);
+  }
+  .del-handle{
+    position:absolute;
+    width:34px;height:34px;
+    background:#ff6b6b;
+    color:#fff;
+    border-radius:50%;
+    top:-17px;
+    right:-17px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:17px;
+    z-index:5;
+    line-height:1;
+    touch-action:none;
+    box-shadow:0 2px 8px rgba(0,0,0,.4);
+  }
+  #menuToggle{
+    display:none;
+    min-width:44px;
+    font-size:18px;
+  }
+  #sidebarBackdrop{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.5);
+    z-index:40;
+  }
+  /* 태블릿(가로 900px 이하)에서는 사이드바를 슬라이드 서랍으로 전환해 캔버스 공간을 확보 */
+  @media (max-width: 900px){
+    #menuToggle{ display:inline-flex; align-items:center; justify-content:center; }
+    #sidebar{
+      position:fixed;
+      top:0; left:0; bottom:0;
+      z-index:50;
+      transform:translateX(-100%);
+      transition:transform .25s ease;
+      box-shadow:6px 0 28px rgba(0,0,0,.45);
+    }
+    #sidebar.open{ transform:translateX(0); }
+    #sidebarBackdrop.open{ display:block; }
+    #toolbar .hint{ display:none; }
+  }
+  @media (max-width: 520px){
+    #sidebar{ width:88vw; min-width:0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>🪑 가구 배치 시뮬레이터</h1>
+
+  <div class="panel-block">
+    <h2 style="margin-top:0;">가구 추가</h2>
+    <div class="field-row">
+      <input type="text" id="fName" placeholder="가구 이름 (예: 침대)" value="새 가구" />
+    </div>
+    <div class="field-row">
+      <input type="number" id="fWidth" placeholder="가로" min="1" value="120" />
+      <span class="unit-label">cm ×</span>
+      <input type="number" id="fHeight" placeholder="세로" min="1" value="60" />
+      <span class="unit-label">cm</span>
+      <input type="color" id="fColor" value="#f4c542" />
+    </div>
+    <button id="addBtn">+ 블럭 추가</button>
+  </div>
+
+  <h2>배치된 가구 (<span id="countLabel">0</span>)</h2>
+  <div id="furnitureList"></div>
+  <div id="emptyMsg">아직 배치된 가구가 없습니다.<br/>위에서 가로/세로 크기를 입력하고 "블럭 추가"를 눌러보세요.</div>
+
+  <div id="footerBtns">
+    <button class="ghost-btn" id="clearBtn">전체 삭제</button>
+    <button class="ghost-btn" id="resetLayoutBtn">위치 초기화</button>
+  </div>
+
+  <div class="panel-block" style="margin-top:2px;">
+    <h2 style="margin-top:0;">다른 기기와 동기화</h2>
+    <div class="field-row">
+      <button class="ghost-btn" id="exportBtn" style="flex:1;">📤 내보내기</button>
+      <button class="ghost-btn" id="importBtn" style="flex:1;">📥 가져오기</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--sub);line-height:1.5;padding-bottom:14px;">
+      내보내기로 배치 파일을 저장/공유(카카오톡·에어드랍·이메일 등)하고, 다른 기기에서 가져오기로 불러오면 배치가 그대로 옮겨집니다.
+    </div>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none;" />
+  </div>
+</div>
+
+<div id="sidebarBackdrop"></div>
+
+<div id="main">
+  <div id="toolbar">
+    <button class="ghost-btn" id="menuToggle" title="메뉴">☰</button>
+    <button class="ghost-btn" id="zoomOut">－</button>
+    <span id="zoomVal">100%</span>
+    <button class="ghost-btn" id="zoomIn">＋</button>
+    <span class="hint">드래그로 이동 · 선택 후 ⟳ 로 90° 회전 · Delete 키로 삭제</span>
+    <div class="spacer"></div>
+    <span class="hint" id="selInfo"></span>
+  </div>
+  <div id="canvasWrap">
+    <div id="canvas"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- 도면 정의 (단위: cm) ----------
+   첨부된 평면도(대략적인 실측치 mm를 cm로 환산)를 바탕으로 재구성한
+   근사 배치입니다. 실제 벽 위치와 다소 차이가 있을 수 있어요.
+------------------------------------------------- */
+const PX_PER_CM_BASE = 1.7;
+let scale = PX_PER_CM_BASE;
+
+const ORIGIN_X = 130; // 여백
+const ORIGIN_Y = 40;
+
+/* 배경: 도면을 직접 그리는 대신, 실제 참고 이미지(floorplan.png)를 배경으로 깔고
+   침실1 실측치(가로 3270mm × 세로 4120mm)를 기준으로 캘리브레이션했습니다.
+   이미지에서 침실1의 벽 중심 픽셀 좌표를 측정한 값:
+     좌우벽 x = 22px, 250.5px  → 폭 228.5px = 327cm  → 1.4311 cm/px
+     상하벽 y = 328px, 602.5px → 높이 274.5px = 412cm → 1.5010 cm/px
+   두 값의 평균(1.46605 cm/px)을 이미지 전체에 균일 적용합니다. */
+const IMG_SRC = 'floorplan.png';
+const IMG_NATURAL_W = 918;
+const IMG_NATURAL_H = 673;
+const CM_PER_PX = (327/228.5 + 412/274.5) / 2; // ≈ 1.46605
+const PLAN_W_CM = IMG_NATURAL_W * CM_PER_PX;
+const PLAN_H_CM = IMG_NATURAL_H * CM_PER_PX;
+
+/* ---------- 상태 ---------- */
+let furniture = []; // {id,name,w,h,x,y,rot,color}
+let idSeq = 1;
+let selectedId = null;
+
+const canvas = document.getElementById('canvas');
+const listEl = document.getElementById('furnitureList');
+const countLabel = document.getElementById('countLabel');
+const emptyMsg = document.getElementById('emptyMsg');
+const zoomVal = document.getElementById('zoomVal');
+const selInfo = document.getElementById('selInfo');
+
+const PLAN = { minX:0, minY:0, maxX:PLAN_W_CM, maxY:PLAN_H_CM };
+const PLAN_W = PLAN_W_CM;
+const PLAN_H = PLAN_H_CM;
+
+function cmToPx(v){ return v*scale; }
+
+function planXToPx(x){ return cmToPx(x - PLAN.minX); }
+function planYToPx(y){ return cmToPx(y - PLAN.minY); }
+
+function renderCanvasSize(){
+  canvas.style.width = cmToPx(PLAN_W)+'px';
+  canvas.style.height = cmToPx(PLAN_H)+'px';
+  canvas.style.backgroundSize = cmToPx(50)+'px '+cmToPx(50)+'px';
+}
+
+function renderRooms(){
+  let img = document.getElementById('bgPlan');
+  if(!img){
+    img = document.createElement('img');
+    img.id = 'bgPlan';
+    img.src = IMG_SRC;
+    img.alt = '평면도';
+    img.style.position='absolute';
+    img.style.left='0';
+    img.style.top='0';
+    img.style.pointerEvents='none';
+    img.style.userSelect='none';
+    canvas.insertBefore(img, canvas.firstChild);
+  }
+  img.style.width = cmToPx(PLAN_W)+'px';
+  img.style.height = cmToPx(PLAN_H)+'px';
+}
+
+function fmtDim(f){ return f.w+'×'+f.h; }
+
+function renderFurniture(){
+  canvas.querySelectorAll('.furniture').forEach(el=>el.remove());
+  furniture.forEach(f=>{
+    const el = document.createElement('div');
+    el.className='furniture'+(f.id===selectedId?' selected':'');
+    el.dataset.id=f.id;
+    const dispW = f.rot%180===0 ? f.w : f.h;
+    const dispH = f.rot%180===0 ? f.h : f.w;
+    el.style.left = planXToPx(f.x)+'px';
+    el.style.top = planYToPx(f.y)+'px';
+    el.style.width = cmToPx(dispW)+'px';
+    el.style.height = cmToPx(dispH)+'px';
+    el.style.background = f.color;
+    el.innerHTML = '<span>'+escapeHtml(f.name)+'<br/><span class="dim">'+fmtDim(f)+' cm</span></span>';
+
+    if(f.id===selectedId){
+      const rh=document.createElement('div');
+      rh.className='rotate-handle';
+      rh.textContent='⟳';
+      rh.title='90° 회전';
+      rh.addEventListener('mousedown', e=>e.stopPropagation());
+      rh.addEventListener('click', e=>{
+        e.stopPropagation();
+        f.rot = (f.rot+90)%360;
+        clampFurniture(f);
+        save(); renderFurniture(); renderList();
+      });
+      el.appendChild(rh);
+
+      const dh=document.createElement('div');
+      dh.className='del-handle';
+      dh.textContent='×';
+      dh.title='삭제';
+      dh.addEventListener('mousedown', e=>e.stopPropagation());
+      dh.addEventListener('click', e=>{
+        e.stopPropagation();
+        removeFurniture(f.id);
+      });
+      el.appendChild(dh);
+    }
+
+    el.addEventListener('mousedown', (e)=>startDrag(e, f));
+    el.addEventListener('touchstart', (e)=>startDrag(e, f), {passive:false});
+    canvas.appendChild(el);
+  });
+  updateSelInfo();
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function clampFurniture(f){
+  const dispW = f.rot%180===0 ? f.w : f.h;
+  const dispH = f.rot%180===0 ? f.h : f.w;
+  f.x = Math.max(PLAN.minX, Math.min(f.x, PLAN.maxX-dispW));
+  f.y = Math.max(PLAN.minY, Math.min(f.y, PLAN.maxY-dispH));
+}
+
+function startDrag(e, f){
+  e.preventDefault();
+  selectedId = f.id;
+  renderFurniture(); renderList();
+
+  const isTouch = e.type==='touchstart';
+  const startPoint = isTouch ? e.touches[0] : e;
+  const startClientX = startPoint.clientX;
+  const startClientY = startPoint.clientY;
+  const startX = f.x, startY = f.y;
+
+  function onMove(ev){
+    if(ev.touches) ev.preventDefault();
+    const p = ev.touches ? ev.touches[0] : ev;
+    const dx = (p.clientX - startClientX)/scale;
+    const dy = (p.clientY - startClientY)/scale;
+    f.x = startX + dx;
+    f.y = startY + dy;
+    clampFurniture(f);
+    positionFurnitureEl(f);
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+    save();
+    renderList();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchmove', onMove, {passive:false});
+  document.addEventListener('touchend', onUp);
+}
+
+function positionFurnitureEl(f){
+  const el = canvas.querySelector('.furniture[data-id="'+f.id+'"]');
+  if(!el) return;
+  el.style.left = planXToPx(f.x)+'px';
+  el.style.top = planYToPx(f.y)+'px';
+}
+
+function renderList(){
+  listEl.innerHTML='';
+  countLabel.textContent = furniture.length;
+  emptyMsg.style.display = furniture.length? 'none':'block';
+  furniture.forEach(f=>{
+    const row=document.createElement('div');
+    row.className='item-row'+(f.id===selectedId?' selected':'');
+    row.innerHTML = `
+      <div class="item-swatch" style="background:${f.color}"></div>
+      <div class="item-info">
+        <div class="item-name">${escapeHtml(f.name)}</div>
+        <div class="item-dim">${fmtDim(f)} cm</div>
+      </div>
+      <button class="item-rotate" title="90° 회전">⟳</button>
+      <button class="item-del" title="삭제">×</button>
+    `;
+    row.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('item-del') || e.target.classList.contains('item-rotate')) return;
+      selectedId = f.id;
+      renderFurniture(); renderList();
+    });
+    row.querySelector('.item-rotate').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      f.rot = (f.rot+90)%360;
+      clampFurniture(f);
+      selectedId = f.id;
+      save();
+      renderFurniture(); renderList();
+    });
+    row.querySelector('.item-del').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      removeFurniture(f.id);
+    });
+    listEl.appendChild(row);
+  });
+}
+
+function removeFurniture(id){
+  furniture = furniture.filter(f=>f.id!==id);
+  if(selectedId===id) selectedId=null;
+  save();
+  renderFurniture(); renderList();
+}
+
+function updateSelInfo(){
+  const f = furniture.find(x=>x.id===selectedId);
+  selInfo.textContent = f ? `선택됨: ${f.name} (${fmtDim(f)} cm)` : '';
+}
+
+/* ---------- 저장/불러오기 ---------- */
+function save(){
+  try{
+    localStorage.setItem('furniture-layout-v1', JSON.stringify(furniture));
+  }catch(e){ /* storage unavailable (e.g. sandboxed preview) - ignore */ }
+}
+function load(){
+  try{
+    const raw = localStorage.getItem('furniture-layout-v1');
+    if(raw){
+      furniture = JSON.parse(raw);
+      idSeq = furniture.reduce((m,f)=>Math.max(m,f.id),0)+1;
+    }
+  }catch(e){ furniture=[]; }
+}
+
+/* ---------- 기기 간 동기화: 내보내기(공유/다운로드) · 가져오기 ---------- */
+async function exportLayout(){
+  const payload = { app:'furniture-layout', version:1, exportedAt:new Date().toISOString(), furniture };
+  const json = JSON.stringify(payload, null, 2);
+  const stamp = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+  const filename = `가구배치_${stamp}.json`;
+  const file = new File([json], filename, {type:'application/json'});
+
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:'가구 배치 데이터', text:'가구 배치 파일'});
+      return;
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // 사용자가 공유 취소
+      // 공유 실패 시 아래 다운로드 방식으로 대체
+    }
+  }
+  const url = URL.createObjectURL(new Blob([json], {type:'application/json'}));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+function importLayoutFromFile(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const data = JSON.parse(reader.result);
+      const incoming = Array.isArray(data) ? data : data.furniture;
+      if(!Array.isArray(incoming)) throw new Error('invalid');
+      const valid = incoming.every(f => f && typeof f.w==='number' && typeof f.h==='number' && typeof f.x==='number' && typeof f.y==='number');
+      if(!valid) throw new Error('invalid');
+      if(furniture.length && !confirm(`현재 배치(${furniture.length}개)를 가져온 배치(${incoming.length}개)로 덮어쓸까요?`)) return;
+      furniture = incoming.map(f => ({
+        id: idSeq++,
+        name: f.name || '가구',
+        w: f.w, h: f.h, x: f.x, y: f.y,
+        rot: f.rot || 0,
+        color: f.color || '#f4c542'
+      }));
+      selectedId = null;
+      save();
+      renderFurniture(); renderList();
+      alert(`${furniture.length}개의 가구 배치를 가져왔습니다.`);
+    }catch(e){
+      alert('파일을 읽을 수 없습니다. 이 앱에서 내보낸 JSON 파일인지 확인해주세요.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 가구 추가 ---------- */
+document.getElementById('addBtn').addEventListener('click', ()=>{
+  const name = document.getElementById('fName').value.trim() || '가구';
+  const w = parseFloat(document.getElementById('fWidth').value);
+  const h = parseFloat(document.getElementById('fHeight').value);
+  const color = document.getElementById('fColor').value;
+  if(!w || !h || w<=0 || h<=0){
+    alert('가로/세로 크기를 올바르게 입력해주세요.');
+    return;
+  }
+  const cx = PLAN.minX + PLAN_W/2 - w/2;
+  const cy = PLAN.minY + PLAN_H/2 - h/2;
+  const f = { id:idSeq++, name, w, h, x:cx, y:cy, rot:0, color };
+  clampFurniture(f);
+  furniture.push(f);
+  selectedId = f.id;
+  save();
+  renderFurniture(); renderList();
+});
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  if(furniture.length && !confirm('배치된 가구를 모두 삭제할까요?')) return;
+  furniture=[]; selectedId=null;
+  save(); renderFurniture(); renderList();
+});
+
+document.getElementById('resetLayoutBtn').addEventListener('click', ()=>{
+  furniture.forEach(f=>{
+    f.x = PLAN.minX + PLAN_W/2 - f.w/2;
+    f.y = PLAN.minY + PLAN_H/2 - f.h/2;
+    f.rot = 0;
+    clampFurniture(f);
+  });
+  save(); renderFurniture(); renderList();
+});
+
+document.getElementById('exportBtn').addEventListener('click', exportLayout);
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(file) importLayoutFromFile(file);
+  e.target.value = '';
+});
+
+document.addEventListener('keydown', (e)=>{
+  if((e.key==='Delete' || e.key==='Backspace') && selectedId!==null){
+    const active = document.activeElement;
+    if(active && (active.tagName==='INPUT')) return;
+    removeFurniture(selectedId);
+  }
+  if(e.key==='r' || e.key==='R'){
+    const f = furniture.find(x=>x.id===selectedId);
+    if(f){
+      f.rot=(f.rot+90)%360;
+      clampFurniture(f);
+      save(); renderFurniture(); renderList();
+    }
+  }
+});
+
+canvas.addEventListener('mousedown', (e)=>{
+  if(e.target===canvas){ selectedId=null; renderFurniture(); renderList(); }
+});
+canvas.addEventListener('touchstart', (e)=>{
+  if(e.target===canvas || e.target.id==='bgPlan'){ selectedId=null; renderFurniture(); renderList(); }
+});
+
+/* ---------- 줌 ---------- */
+function applyZoom(){
+  renderCanvasSize();
+  renderRooms();
+  renderFurniture();
+  zoomVal.textContent = Math.round(scale/PX_PER_CM_BASE*100)+'%';
+}
+document.getElementById('zoomIn').addEventListener('click', ()=>{
+  scale = Math.min(scale*1.15, PX_PER_CM_BASE*3);
+  applyZoom();
+});
+document.getElementById('zoomOut').addEventListener('click', ()=>{
+  scale = Math.max(scale/1.15, PX_PER_CM_BASE*0.4);
+  applyZoom();
+});
+
+/* ---------- 핀치 줌 (태블릿 두 손가락) ---------- */
+const mainEl = document.getElementById('main');
+function touchDist(t1, t2){
+  const dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+let pinchStartDist = null, pinchStartScale = null;
+mainEl.addEventListener('touchstart', (e)=>{
+  if(e.touches.length===2){
+    pinchStartDist = touchDist(e.touches[0], e.touches[1]);
+    pinchStartScale = scale;
+  }
+}, {passive:false});
+mainEl.addEventListener('touchmove', (e)=>{
+  if(e.touches.length===2 && pinchStartDist){
+    e.preventDefault();
+    const d = touchDist(e.touches[0], e.touches[1]);
+    scale = Math.max(PX_PER_CM_BASE*0.4, Math.min(pinchStartScale*(d/pinchStartDist), PX_PER_CM_BASE*3));
+    applyZoom();
+  }
+}, {passive:false});
+mainEl.addEventListener('touchend', (e)=>{
+  if(e.touches.length<2) pinchStartDist = null;
+});
+
+/* ---------- 사이드바(태블릿 서랍 메뉴) ---------- */
+const sidebarEl = document.getElementById('sidebar');
+const backdropEl = document.getElementById('sidebarBackdrop');
+function toggleSidebar(open){
+  const willOpen = open !== undefined ? open : !sidebarEl.classList.contains('open');
+  sidebarEl.classList.toggle('open', willOpen);
+  backdropEl.classList.toggle('open', willOpen);
+}
+document.getElementById('menuToggle').addEventListener('click', ()=>toggleSidebar());
+backdropEl.addEventListener('click', ()=>toggleSidebar(false));
+
+/* ---------- 초기화 ---------- */
+load();
+renderCanvasSize();
+renderRooms();
+renderFurniture();
+renderList();
+
+/* ---------- PWA: 설치형 앱으로 실행되도록 서비스워커 등록 ----------
+   file:// 로 직접 열었을 때는 보안 컨텍스트가 아니라 서비스워커 등록이 불가능합니다.
+   http(s):// 로 서빙될 때만 등록을 시도하고, 실패해도 앱 사용에는 지장이 없습니다. */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
