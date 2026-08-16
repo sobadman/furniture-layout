@@ -476,7 +476,7 @@ function renderFurniture(){
       rh.className='rotate-handle';
       rh.textContent='⟳';
       rh.title='90° 회전';
-      rh.addEventListener('mousedown', e=>e.stopPropagation());
+      rh.addEventListener('pointerdown', e=>e.stopPropagation());
       rh.addEventListener('click', e=>{
         e.stopPropagation();
         f.rot = (f.rot+90)%360;
@@ -489,7 +489,7 @@ function renderFurniture(){
       dh.className='del-handle';
       dh.textContent='×';
       dh.title='삭제';
-      dh.addEventListener('mousedown', e=>e.stopPropagation());
+      dh.addEventListener('pointerdown', e=>e.stopPropagation());
       dh.addEventListener('click', e=>{
         e.stopPropagation();
         removeFurniture(f.id);
@@ -497,8 +497,7 @@ function renderFurniture(){
       el.appendChild(dh);
     }
 
-    el.addEventListener('mousedown', (e)=>startDrag(e, f));
-    el.addEventListener('touchstart', (e)=>startDrag(e, f), {passive:false});
+    el.addEventListener('pointerdown', (e)=>startDrag(e, f));
     canvas.appendChild(el);
   });
   updateSelInfo();
@@ -516,38 +515,47 @@ function clampFurniture(f){
 }
 
 function startDrag(e, f){
+  // 마우스/터치/펜(스타일러스)을 모두 Pointer Events 하나로 통일 처리.
+  // 펜 입력은 브라우저에 따라 mouseup/touchend가 아예 안 오는 경우가 있어
+  // (호버 감지·palm rejection 등으로 pointercancel만 오는 경우 포함) 드래그가
+  // "펜을 계속 따라다니는" 상태로 멈춰 있었던 원인이었음. setPointerCapture로
+  // 해당 포인터의 이후 이벤트를 이 요소에 확실히 고정시키고, up/cancel 둘 다 정리한다.
   e.preventDefault();
+  const el = e.currentTarget;
+  const pointerId = e.pointerId;
+  try{ el.setPointerCapture(pointerId); }catch(err){}
+
   selectedId = f.id;
   renderFurniture(); renderList();
 
-  const isTouch = e.type==='touchstart';
-  const startPoint = isTouch ? e.touches[0] : e;
-  const startClientX = startPoint.clientX;
-  const startClientY = startPoint.clientY;
+  const startClientX = e.clientX;
+  const startClientY = e.clientY;
   const startX = f.x, startY = f.y;
+  let ended = false;
 
   function onMove(ev){
-    if(ev.touches) ev.preventDefault();
-    const p = ev.touches ? ev.touches[0] : ev;
-    const dx = (p.clientX - startClientX)/scale;
-    const dy = (p.clientY - startClientY)/scale;
+    if(ev.pointerId !== pointerId) return;
+    ev.preventDefault();
+    const dx = (ev.clientX - startClientX)/scale;
+    const dy = (ev.clientY - startClientY)/scale;
     f.x = startX + dx;
     f.y = startY + dy;
     clampFurniture(f);
     positionFurnitureEl(f);
   }
-  function onUp(){
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    document.removeEventListener('touchmove', onMove);
-    document.removeEventListener('touchend', onUp);
+  function onEnd(ev){
+    if(ev.pointerId !== pointerId || ended) return;
+    ended = true;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onEnd);
+    document.removeEventListener('pointercancel', onEnd);
+    try{ el.releasePointerCapture(pointerId); }catch(err){}
     save();
     renderList();
   }
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-  document.addEventListener('touchmove', onMove, {passive:false});
-  document.addEventListener('touchend', onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onEnd);
+  document.addEventListener('pointercancel', onEnd);
 }
 
 function positionFurnitureEl(f){
@@ -739,10 +747,7 @@ document.addEventListener('keydown', (e)=>{
   }
 });
 
-canvas.addEventListener('mousedown', (e)=>{
-  if(e.target===canvas){ selectedId=null; renderFurniture(); renderList(); }
-});
-canvas.addEventListener('touchstart', (e)=>{
+canvas.addEventListener('pointerdown', (e)=>{
   if(e.target===canvas || e.target.id==='bgPlan'){ selectedId=null; renderFurniture(); renderList(); }
 });
 
